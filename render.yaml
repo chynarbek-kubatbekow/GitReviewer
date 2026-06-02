@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: telegram-json-notifier
+    runtime: docker
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
