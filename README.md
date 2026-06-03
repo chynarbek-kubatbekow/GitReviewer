@@ -25,7 +25,23 @@ Health checks:
 ```text
 GET /actuator/health
 GET /api/telegram/ping
+GET /
+GET /health
+GET /uptime
+HEAD /
+HEAD /health
+HEAD /uptime
 ```
+
+For UptimeRobot, use one of these URLs:
+
+```text
+https://your-service.onrender.com/
+https://your-service.onrender.com/health
+https://your-service.onrender.com/uptime
+```
+
+`HEAD` requests are accepted and return an empty `204 No Content` response.
 
 Generic JSON notification:
 
