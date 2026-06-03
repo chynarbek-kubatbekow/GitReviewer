@@ -108,12 +108,15 @@ MR: Fix OCR passport validation
 Branch: feature/ocr-fix -> develop
 Author: Ivan Ivanov
 Reviewer: @reviewer_username
+Commit: abc1234
+Description: Fix OCR passport validation
 
 Merge Request
 Pipeline
 ```
 
 The actual message uses Telegram HTML formatting with bold text, code formatting, emoji labels, and clickable links.
+The commit line links to the exact commit that triggered the Merge Request pipeline.
 
 ## Deploy on Render
 

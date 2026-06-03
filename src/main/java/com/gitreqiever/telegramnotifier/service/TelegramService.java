@@ -62,6 +62,10 @@ public class TelegramService {
         String reviewers = stringValue(payload, "telegramUsers", "-");
         String mergeRequestUrl = stringValue(payload, "mergeRequestUrl", "");
         String pipelineUrl = stringValue(payload, "pipelineUrl", "");
+        String commitTitle = truncate(stringValue(payload, "commitTitle", ""), 500);
+        String commitShortSha = stringValue(payload, "commitShortSha", "");
+        String commitUrl = stringValue(payload, "commitUrl", "");
+        String commitSection = formatCommitSection(commitTitle, commitShortSha, commitUrl);
 
         return """
                 %s — <b>%s</b>
@@ -71,6 +75,7 @@ public class TelegramService {
                 🌿 Ветка: <code>%s</code> → <code>%s</code>
                 👤 Автор: %s
                 👀 Ревьювер: %s
+                %s
 
                 🔗 <a href="%s">Merge Request</a>
                 🔗 <a href="%s">Пайплайн</a>""".formatted(
@@ -82,9 +87,25 @@ public class TelegramService {
                 escapeHtml(targetBranch),
                 escapeHtml(author),
                 escapeHtml(reviewers),
+                commitSection,
                 escapeHtml(mergeRequestUrl),
                 escapeHtml(pipelineUrl)
         );
+    }
+
+    private String formatCommitSection(String commitTitle, String commitShortSha, String commitUrl) {
+        if (commitTitle.isBlank() && commitShortSha.isBlank()) {
+            return "";
+        }
+
+        String commitLabel = commitShortSha.isBlank()
+                ? "Commit"
+                : "<a href=\"%s\">%s</a>".formatted(escapeHtml(commitUrl), escapeHtml(commitShortSha));
+
+        return """
+
+                🧩 Commit: %s
+                📝 Описание: %s""".formatted(commitLabel, escapeHtml(commitTitle));
     }
 
     private String toPrettyJson(Map<String, Object> payload) {
@@ -126,6 +147,14 @@ public class TelegramService {
     private String stringValue(Map<String, Object> payload, String key, String fallback) {
         Object value = payload.get(key);
         return value instanceof String string && !string.isBlank() ? string : fallback;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value.length() <= maxLength) {
+            return value;
+        }
+
+        return value.substring(0, maxLength - 3) + "...";
     }
 
     private String escapeHtml(String value) {
