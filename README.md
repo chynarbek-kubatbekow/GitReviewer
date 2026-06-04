@@ -1,265 +1,331 @@
 # Telegram MR Notifier
 
-Сервис принимает данные из GitLab CI/CD и отправляет уведомления в Telegram-группу при создании или обновлении Merge Request.
+## PRD
 
-## Что делает сервис
+### Название
 
-- принимает HTTP-запрос от GitLab CI job;
-- форматирует сообщение для Telegram;
-- отправляет сообщение в Telegram-группу через бота;
-- добавляет в сообщение MR, ветки, автора, ревьювера, commit и pipeline;
-- принимает `HEAD` и `GET` запросы от UptimeRobot;
-- хранит токены только в переменных окружения.
+Добавить Telegram-уведомление при создании Merge Request.
 
-## Схема работы
+### Цель
+
+Сервис должен принимать данные из GitLab CI/CD при запуске Merge Request pipeline и отправлять уведомление в Telegram-чат через Telegram-бота, который уже добавлен в группу.
+
+### Как это работает
 
 ```text
-GitLab Merge Request
+GitLab Merge Request pipeline
         ↓
 GitLab CI job telegram_notify_mr
         ↓
-Render server
+Физический сервер с этим Spring Boot приложением
         ↓
-Telegram group
+Telegram Bot API
+        ↓
+Telegram-группа или канал
 ```
 
-GitLab Webhook для этой схемы не нужен. Уведомление отправляет CI job из `.gitlab-ci.yml`.
-
-## Переменные Render
-
-В Render открой сервис, перейди в `Environment` и добавь:
+GitLab не отправляет сообщение в Telegram напрямую. GitLab CI отправляет данные на сервер:
 
 ```text
-TELEGRAM_BOT_TOKEN=токен_бота
-TELEGRAM_CHAT_ID=-1003894821178
-WEBHOOK_SECRET=любой_секрет
+POST /api/telegram/gitlab/merge-request
 ```
 
-`TELEGRAM_BOT_TOKEN` берется у BotFather.
+Сервер проверяет секрет, форматирует сообщение и отправляет его в Telegram через Bot API.
 
-`TELEGRAM_CHAT_ID` — id Telegram-группы.
+Уведомление отправляется только для Merge Request pipeline, где target branch равен `main` или `master`.
 
-`WEBHOOK_SECRET` защищает сервер от посторонних запросов.
-
-Не добавляй реальные токены в `.env.example`, README или исходный код. Реальные значения должны быть только в Render Environment и GitLab CI/CD Variables.
-
-## Деплой на Render
-
-### Через Blueprint
-
-1. Загрузи этот проект в GitHub или GitLab.
-2. В Render нажми `New`.
-3. Выбери `Blueprint`.
-4. Укажи репозиторий с этим проектом.
-5. Render прочитает `render.yaml`.
-6. После создания сервиса добавь переменные окружения из раздела выше.
-
-### Через Web Service
-
-Если создаешь сервис вручную:
-
-```text
-Runtime: Docker
-Build Command: оставить пустым
-Start Command: оставить пустым
-Health Check Path: /actuator/health
-```
-
-Если Docker выбрать нельзя:
-
-```text
-Build Command: mvn clean package -DskipTests
-Start Command: java -jar target/telegram-json-notifier-0.1.0.jar
-```
-
-## Проверка сервера
-
-После деплоя открой:
-
-```text
-https://your-service.onrender.com/health
-```
-
-Ожидаемый ответ:
-
-```json
-{
-  "ok": true
-}
-```
-
-Для UptimeRobot используй:
-
-```text
-https://your-service.onrender.com/uptime
-```
-
-Можно использовать `HEAD`. Если сервис мониторинга отправляет только `GET`, это тоже работает.
-
-## Endpoint для GitLab
-
-GitLab CI job отправляет данные сюда:
-
-```text
-POST https://your-service.onrender.com/api/telegram/gitlab/merge-request
-```
-
-Header:
-
-```text
-x-webhook-secret: WEBHOOK_SECRET
-```
-
-Сервер принимает `application/x-www-form-urlencoded` и JSON.
-
-## Настройка GitLab проекта
-
-Открой проект, где создаются Merge Request:
-
-```text
-Settings → CI/CD → Variables
-```
-
-Добавь переменные:
-
-```text
-TELEGRAM_NOTIFY_URL=https://your-service.onrender.com
-TELEGRAM_NOTIFY_SECRET=тот_же_секрет_что_WEBHOOK_SECRET_на_Render
-TELEGRAM_USERS=@reviewer_username
-```
-
-Необязательно:
-
-```text
-SERVICE_NAME=mobile-client-service
-```
-
-Если `SERVICE_NAME` не задан, будет использован `CI_PROJECT_NAME`.
-
-Для `TELEGRAM_NOTIFY_SECRET` можно выбрать `Masked`. `Protected` лучше не включать, если pipeline запускается из обычных feature-веток.
-
-## Файл .gitlab-ci.yml
-
-В корне GitLab-проекта создай или обнови:
-
-```text
-.gitlab-ci.yml
-```
-
-Минимальная конфигурация:
-
-```yaml
-stages:
-  - notify
-
-telegram_notify_mr:
-  stage: notify
-  image:
-    name: curlimages/curl:8.8.0
-    entrypoint: [""]
-  allow_failure: true
-  script:
-    - |
-      case "$CI_JOB_STATUS" in
-        failed) STATUS="failed" ;;
-        *) STATUS="success" ;;
-      esac
-
-      curl -sS -X POST "$TELEGRAM_NOTIFY_URL/api/telegram/gitlab/merge-request" \
-        -H "x-webhook-secret: $TELEGRAM_NOTIFY_SECRET" \
-        -d "jobStatus=$STATUS" \
-        --data-urlencode "jobName=$CI_JOB_NAME" \
-        --data-urlencode "serviceName=${SERVICE_NAME:-$CI_PROJECT_NAME}" \
-        --data-urlencode "mergeRequestTitle=$CI_MERGE_REQUEST_TITLE" \
-        --data-urlencode "sourceBranch=$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" \
-        --data-urlencode "targetBranch=$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" \
-        --data-urlencode "author=$GITLAB_USER_NAME" \
-        --data-urlencode "telegramUsers=$TELEGRAM_USERS" \
-        --data-urlencode "mergeRequestUrl=$CI_MERGE_REQUEST_PROJECT_URL/-/merge_requests/$CI_MERGE_REQUEST_IID" \
-        --data-urlencode "commitTitle=$CI_COMMIT_TITLE" \
-        --data-urlencode "commitShortSha=$CI_COMMIT_SHORT_SHA" \
-        --data-urlencode "commitUrl=$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA" \
-        --data-urlencode "pipelineUrl=$CI_PIPELINE_URL" || true
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-```
-
-Если `stages` уже есть, добавь туда `notify`. Если в файле уже есть другие jobs, вставь `telegram_notify_mr` в конец.
-
-## Сообщение в Telegram
-
-Пример:
+## Что должно быть в сообщении
 
 ```text
 ✅ SUCCESS — telegram_notify_mr
 
-📦 Сервис: BALAM-3
-🔀 MR: Draft: Feature/my change
-🌿 Ветка: feature/my-change → main
-👤 Автор: chynarbek-kubatbekow
-👀 Ревьювер: @reviewer
-
-🧩 Commit: d59a1d4
-📝 Описание: Update notification config
+📦 Сервис: mobile-client-service
+🔀 MR: Исправление OCR проверки паспорта
+🌿 Ветка: feature/ocr-fix → develop
+👤 Автор: Иван Иванов
+👀 Ревьювер: @reviewer_username
 
 🔗 Merge Request
 🔗 Пайплайн
 ```
 
-`Merge Request` открывает MR.
+Сообщение содержит:
 
-`Пайплайн` открывает конкретный pipeline.
+- статус job;
+- название сервиса;
+- название Merge Request;
+- source branch;
+- target branch;
+- автора;
+- тег ревьювера из `${TELEGRAM_USERS}`;
+- ссылку на Merge Request;
+- ссылку на pipeline.
 
-`Commit` открывает commit, который запустил pipeline.
+## Переменные на сервере
+
+На физическом сервере приложению нужны environment variables:
+
+```text
+PORT=10000
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+WEBHOOK_SECRET=your-secret
+```
+
+Назначение:
+
+- `PORT` - порт приложения. По умолчанию можно использовать `10000`.
+- `TELEGRAM_BOT_TOKEN` - токен Telegram-бота от BotFather.
+- `TELEGRAM_CHAT_ID` - id группы или канала, куда бот отправляет сообщения.
+- `WEBHOOK_SECRET` - секрет для защиты endpoint от посторонних запросов.
+
+Реальные значения нельзя хранить в Git. Они должны быть только на сервере и в GitLab CI/CD Variables.
+
+## Требования к Telegram
+
+1. Telegram-бот уже создан через BotFather.
+2. Бот добавлен в нужную группу или канал.
+3. У бота есть право отправлять сообщения.
+4. Известен `TELEGRAM_CHAT_ID` группы или канала.
+
+Если бот пишет в канал, он должен быть добавлен в канал как администратор.
+
+## Endpoint сервера
+
+Health checks:
+
+```text
+GET /actuator/health
+GET /api/telegram/ping
+GET /
+GET /health
+GET /uptime
+HEAD /
+HEAD /health
+HEAD /uptime
+```
+
+Endpoint для GitLab MR:
+
+```text
+POST /api/telegram/gitlab/merge-request
+Content-Type: application/x-www-form-urlencoded
+Header: x-webhook-secret: WEBHOOK_SECRET
+```
+
+Endpoint также принимает JSON.
+
+## GitLab CI/CD variables
+
+В GitLab проекте открыть:
+
+```text
+Settings -> CI/CD -> Variables
+```
+
+Добавить:
+
+```text
+TELEGRAM_NOTIFY_URL=https://your-domain.com
+TELEGRAM_NOTIFY_SECRET=your-secret
+TELEGRAM_USERS=@reviewer_username
+SERVICE_NAME=mobile-client-service
+```
+
+Назначение:
+
+- `TELEGRAM_NOTIFY_URL` - публичный URL физического сервера без `/api/...`.
+- `TELEGRAM_NOTIFY_SECRET` - тот же секрет, что `WEBHOOK_SECRET` на сервере.
+- `TELEGRAM_USERS` - reviewer или reviewers, например `@ivan @aliya`.
+- `SERVICE_NAME` - название сервиса в сообщении. Если переменная пустая, используется `CI_PROJECT_NAME`.
+
+Для `TELEGRAM_NOTIFY_SECRET` рекомендуется включить `Masked`. `Protected` включать не нужно, если MR pipeline запускается из обычных feature-веток.
+
+## GitLab CI job
+
+Готовый шаблон находится в файле:
+
+```text
+.gitlab-ci.telegram-notify.yml
+```
+
+В основном `.gitlab-ci.yml` проекта можно подключить его так:
+
+```yaml
+include:
+  - local: .gitlab-ci.telegram-notify.yml
+```
+
+В pipeline должен быть stage `notify`:
+
+```yaml
+stages:
+  - build
+  - test
+  - deploy
+  - notify
+```
+
+Job запускается только для Merge Request pipeline в `main` или `master`:
+
+```yaml
+rules:
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(main|master)$/'
+```
+
+Если нужно уведомлять обо всех Merge Request, условие target branch можно убрать и оставить только `$CI_PIPELINE_SOURCE == "merge_request_event"`.
+
+Ошибка отправки Telegram-сообщения не ломает pipeline, потому что job имеет `allow_failure: true`, а `curl` заканчивается через `|| true`.
+
+## Деплой на физический сервер
+
+### Вариант 1: Docker
+
+На сервере должны быть установлены Docker и доступ к Git-репозиторию.
+
+Сборка образа:
+
+```bash
+docker build -t telegram-mr-notifier .
+```
+
+Запуск контейнера:
+
+```bash
+docker run -d \
+  --name telegram-mr-notifier \
+  --restart unless-stopped \
+  -p 10000:10000 \
+  -e PORT=10000 \
+  -e TELEGRAM_BOT_TOKEN="your_bot_token" \
+  -e TELEGRAM_CHAT_ID="your_chat_id" \
+  -e WEBHOOK_SECRET="your-secret" \
+  telegram-mr-notifier
+```
+
+Проверка:
+
+```bash
+curl http://localhost:10000/health
+```
+
+### Вариант 2: systemd без Docker
+
+На сервере нужны Java 21 и Maven.
+
+Сборка:
+
+```bash
+mvn clean package -DskipTests
+```
+
+Файл переменных:
+
+```bash
+sudo nano /etc/telegram-mr-notifier.env
+```
+
+Пример:
+
+```text
+PORT=10000
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+WEBHOOK_SECRET=your-secret
+```
+
+Пример systemd service:
+
+```ini
+[Unit]
+Description=Telegram MR Notifier
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/telegram-mr-notifier.env
+WorkingDirectory=/opt/telegram-mr-notifier
+ExecStart=/usr/bin/java -jar /opt/telegram-mr-notifier/target/telegram-json-notifier-0.1.0.jar
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Запуск:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable telegram-mr-notifier
+sudo systemctl start telegram-mr-notifier
+sudo systemctl status telegram-mr-notifier
+```
+
+## Публичный доступ к серверу
+
+GitLab должен иметь доступ к серверу по публичному HTTPS URL.
+
+Рекомендуемая схема:
+
+```text
+https://your-domain.com
+        ↓
+Nginx reverse proxy
+        ↓
+localhost:10000
+```
+
+Минимально нужно:
+
+- домен или публичный IP;
+- открытый порт `443`;
+- HTTPS сертификат, например Let's Encrypt;
+- reverse proxy на приложение;
+- firewall, который разрешает внешний HTTPS-трафик.
+
+В GitLab переменная `TELEGRAM_NOTIFY_URL` должна указывать именно на публичный адрес:
+
+```text
+TELEGRAM_NOTIFY_URL=https://your-domain.com
+```
 
 ## Проверка вручную
 
+После деплоя можно проверить endpoint без GitLab:
+
 ```bash
-curl -X POST https://your-service.onrender.com/api/telegram/gitlab/merge-request \
+curl -X POST https://your-domain.com/api/telegram/gitlab/merge-request \
   -H "x-webhook-secret: your-secret" \
   -d "jobStatus=success" \
   --data-urlencode "jobName=telegram_notify_mr" \
-  --data-urlencode "serviceName=test-service" \
-  --data-urlencode "mergeRequestTitle=Test MR" \
-  --data-urlencode "sourceBranch=feature/test" \
-  --data-urlencode "targetBranch=main" \
-  --data-urlencode "author=developer" \
-  --data-urlencode "telegramUsers=@reviewer" \
+  --data-urlencode "serviceName=mobile-client-service" \
+  --data-urlencode "mergeRequestTitle=Исправление OCR проверки паспорта" \
+  --data-urlencode "sourceBranch=feature/ocr-fix" \
+  --data-urlencode "targetBranch=develop" \
+  --data-urlencode "author=Иван Иванов" \
+  --data-urlencode "telegramUsers=@reviewer_username" \
   --data-urlencode "mergeRequestUrl=https://gitlab.com/group/project/-/merge_requests/1" \
-  --data-urlencode "commitTitle=Test commit message" \
-  --data-urlencode "commitShortSha=abc1234" \
-  --data-urlencode "commitUrl=https://gitlab.com/group/project/-/commit/abc1234" \
   --data-urlencode "pipelineUrl=https://gitlab.com/group/project/-/pipelines/1"
 ```
 
-## Команды для сервера
+Если все настроено правильно, бот отправит сообщение в Telegram.
 
-```powershell
-cd C:\Users\User\Desktop\GitReqiever
-git status
-git add .
-git commit -m "Update Telegram notifier setup guide"
-git push
-```
+## Критерии приемки
 
-## Команды для GitLab-проекта
-
-```powershell
-cd C:\Users\User\Desktop\BALAM
-git status
-git add .gitlab-ci.yml
-git commit -m "Update Telegram MR notification job"
-git push gitlab feature/my-change
-```
+- Добавлена job для отправки Telegram-уведомления по MR.
+- Уведомление отправляется только для Merge Request pipeline в `main` или `master`.
+- В сообщении отображается название MR.
+- В сообщении есть ссылка на MR.
+- В сообщении есть ссылка на pipeline.
+- В сообщении отображается автор.
+- В сообщении отображаются source и target branch.
+- В сообщении используется `${TELEGRAM_USERS}` для тега ревьювера.
+- Ошибка отправки Telegram-сообщения не ломает pipeline.
 
 ## Частые проблемы
 
-Если pipeline не появился, проверь права пользователя в GitLab.
-
-Если Telegram-сообщение не пришло, проверь `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` и логи Render.
-
-Если GitLab job показывает `401`, значит `TELEGRAM_NOTIFY_SECRET` не совпадает с `WEBHOOK_SECRET`.
-
-Если ревьювер не отображается, проверь `TELEGRAM_USERS`.
-
-Если Render долго отвечает первым запросом, добавь UptimeRobot на `/uptime`.
+- `401 Invalid webhook secret` - `TELEGRAM_NOTIFY_SECRET` в GitLab не совпадает с `WEBHOOK_SECRET` на сервере.
+- `Telegram credentials are not configured` - на сервере не заданы `TELEGRAM_BOT_TOKEN` или `TELEGRAM_CHAT_ID`.
+- Сообщение не приходит - бот не добавлен в группу/канал или не имеет права отправлять сообщения.
+- GitLab job не запускается - pipeline не является Merge Request pipeline.
+- GitLab не может достучаться до сервера - проверь публичный URL, HTTPS, firewall и reverse proxy.

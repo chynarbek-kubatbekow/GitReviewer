@@ -23,4 +23,4 @@ telegram_notify_mr:
         --data-urlencode "mergeRequestUrl=$CI_MERGE_REQUEST_PROJECT_URL/-/merge_requests/$CI_MERGE_REQUEST_IID" \
         --data-urlencode "pipelineUrl=$CI_PIPELINE_URL" || true
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(main|master)$/'
