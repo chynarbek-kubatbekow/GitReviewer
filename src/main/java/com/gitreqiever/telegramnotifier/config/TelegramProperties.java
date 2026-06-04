@@ -9,8 +9,10 @@ public record TelegramProperties(
         String webhookSecret
 ) {
     public boolean hasCredentials() {
-        return botToken != null && !botToken.isBlank()
-                && chatId != null && !chatId.isBlank();
+        boolean hasBotToken = botToken != null && !botToken.isBlank();
+        boolean hasChatId = chatId != null && !chatId.isBlank();
+
+        return hasBotToken && hasChatId;
     }
 
     public boolean hasWebhookSecret() {
