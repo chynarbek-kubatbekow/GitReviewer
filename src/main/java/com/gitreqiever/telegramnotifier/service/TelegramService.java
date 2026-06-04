@@ -40,13 +40,19 @@ public class TelegramService {
     }
 
     private String resolveTitle(Map<String, Object> payload) {
-        return payload.get("title") instanceof String value && !value.isBlank()
-                ? value
-                : "New JSON notification";
+        if (payload.get("title") instanceof String value && !value.isBlank()) {
+            return value;
+        }
+
+        return "New JSON notification";
     }
 
     private String formatMessage(String title, String escapedJson, int part, int totalParts) {
-        String suffix = totalParts > 1 ? " (%d/%d)".formatted(part, totalParts) : "";
+        String suffix = "";
+        if (totalParts > 1) {
+            suffix = " (%d/%d)".formatted(part, totalParts);
+        }
+
         return "<b>%s%s</b>%n%n<pre>%s</pre>".formatted(escapeHtml(title), suffix, escapedJson);
     }
 
@@ -118,16 +124,17 @@ public class TelegramService {
 
     private void sendMessage(String text) {
         String url = "https://api.telegram.org/bot%s/sendMessage".formatted(properties.botToken());
+        Map<String, Object> requestBody = Map.of(
+                "chat_id", properties.chatId(),
+                "text", text,
+                "parse_mode", "HTML",
+                "disable_web_page_preview", true
+        );
 
         restClient.post()
                 .uri(url)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of(
-                        "chat_id", properties.chatId(),
-                        "text", text,
-                        "parse_mode", "HTML",
-                        "disable_web_page_preview", true
-                ))
+                .body(requestBody)
                 .retrieve()
                 .toBodilessEntity();
     }

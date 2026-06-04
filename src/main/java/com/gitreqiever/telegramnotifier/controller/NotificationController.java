@@ -4,6 +4,7 @@ import com.gitreqiever.telegramnotifier.config.TelegramProperties;
 import com.gitreqiever.telegramnotifier.service.TelegramService;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,14 +42,9 @@ public class NotificationController {
             @RequestHeader(value = "x-webhook-secret", required = false) String webhookSecret,
             @RequestBody Map<String, Object> payload
     ) {
-        if (properties.hasWebhookSecret() && !properties.webhookSecret().equals(webhookSecret)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("ok", false, "error", "Invalid webhook secret"));
-        }
-
-        if (!properties.hasCredentials()) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("ok", false, "error", "Telegram credentials are not configured"));
+        Optional<ResponseEntity<Map<String, Object>>> validationError = validateRequest(webhookSecret);
+        if (validationError.isPresent()) {
+            return validationError.get();
         }
 
         telegramService.sendJson(payload);
@@ -83,18 +79,37 @@ public class NotificationController {
             String webhookSecret,
             Map<String, Object> payload
     ) {
-        if (properties.hasWebhookSecret() && !properties.webhookSecret().equals(webhookSecret)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("ok", false, "error", "Invalid webhook secret"));
-        }
-
-        if (!properties.hasCredentials()) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("ok", false, "error", "Telegram credentials are not configured"));
+        Optional<ResponseEntity<Map<String, Object>>> validationError = validateRequest(webhookSecret);
+        if (validationError.isPresent()) {
+            return validationError.get();
         }
 
         telegramService.sendGitlabMergeRequest(payload);
         return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    private Optional<ResponseEntity<Map<String, Object>>> validateRequest(String webhookSecret) {
+        if (hasInvalidWebhookSecret(webhookSecret)) {
+            return Optional.of(error(HttpStatus.UNAUTHORIZED, "Invalid webhook secret"));
+        }
+
+        if (!properties.hasCredentials()) {
+            return Optional.of(error(HttpStatus.INTERNAL_SERVER_ERROR, "Telegram credentials are not configured"));
+        }
+
+        return Optional.empty();
+    }
+
+    private boolean hasInvalidWebhookSecret(String webhookSecret) {
+        return properties.hasWebhookSecret() && !properties.webhookSecret().equals(webhookSecret);
+    }
+
+    private ResponseEntity<Map<String, Object>> error(HttpStatus status, String message) {
+        return ResponseEntity.status(status)
+                .body(Map.of(
+                        "ok", false,
+                        "error", message
+                ));
     }
 
     private Map<String, Object> asObjectMap(Map<String, String> payload) {

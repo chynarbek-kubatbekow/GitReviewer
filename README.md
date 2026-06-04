@@ -34,6 +34,21 @@ POST /api/telegram/gitlab/merge-request
 
 Уведомление отправляется только для Merge Request pipeline, где target branch равен `main` или `master`.
 
+## GitLab flow
+
+Рекомендуемый процесс для разработки:
+
+```text
+feature branch -> Merge Request в dev -> code review -> merge в dev
+dev -> release Merge Request в main
+```
+
+`dev` - ветка для проверки и объединения текущих задач. В нее вливаются feature-ветки после review.
+
+`main` - стабильная ветка. В нее лучше вливать только проверенные изменения из `dev`.
+
+Если проект маленький и работает один разработчик, можно делать MR сразу в `main`. Но для командного процесса ветка `dev` удобнее: она отделяет ежедневную разработку от стабильной версии.
+
 ## Что должно быть в сообщении
 
 ```text
@@ -170,7 +185,9 @@ Job запускается только для Merge Request pipeline в `main` 
 
 ```yaml
 rules:
-  - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(main|master)$/'
+  - if: >
+      $CI_PIPELINE_SOURCE == "merge_request_event" &&
+      $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(main|master)$/
 ```
 
 Если нужно уведомлять обо всех Merge Request, условие target branch можно убрать и оставить только `$CI_PIPELINE_SOURCE == "merge_request_event"`.
@@ -301,7 +318,7 @@ curl -X POST https://your-domain.com/api/telegram/gitlab/merge-request \
   --data-urlencode "serviceName=mobile-client-service" \
   --data-urlencode "mergeRequestTitle=Исправление OCR проверки паспорта" \
   --data-urlencode "sourceBranch=feature/ocr-fix" \
-  --data-urlencode "targetBranch=develop" \
+  --data-urlencode "targetBranch=main" \
   --data-urlencode "author=Иван Иванов" \
   --data-urlencode "telegramUsers=@reviewer_username" \
   --data-urlencode "mergeRequestUrl=https://gitlab.com/group/project/-/merge_requests/1" \
