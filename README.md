@@ -331,8 +331,9 @@ curl -X POST https://your-domain.com/api/telegram/gitlab/merge-request \
 
 ## Критерии приемки
 
-- Добавлена job для отправки Telegram-уведомления по MR.
-- Уведомление отправляется только для Merge Request pipeline в `main` или `master`.
+- Добавлена job для отправки Telegram-уведомления из GitLab pipeline.
+- Уведомление отправляется для Merge Request pipeline в `test`, `dev`, `main`, `master`.
+- Уведомление отправляется для push pipeline в `test`, `dev`, `main`, `master`.
 - В сообщении отображается название MR.
 - В сообщении есть ссылка на MR.
 - В сообщении есть ссылка на pipeline.
@@ -341,10 +342,19 @@ curl -X POST https://your-domain.com/api/telegram/gitlab/merge-request \
 - В сообщении используется `${TELEGRAM_USERS}` для тега ревьювера.
 - Ошибка отправки Telegram-сообщения не ломает pipeline.
 
+## Проверка после подключения
+
+1. Создай Merge Request в `test`, `dev` или `main`.
+2. Дождись запуска pipeline.
+3. Проверь job `telegram_notify_gitlab`.
+4. Убедись, что в Telegram пришли название проекта, ветки, автор, commit, ссылка на MR и ссылка на pipeline.
+5. Сделай обычный push в `test`, `dev` или `main`.
+6. Убедись, что push pipeline тоже отправил сообщение в Telegram.
+
 ## Частые проблемы
 
 - `401 Invalid webhook secret` - `TELEGRAM_NOTIFY_SECRET` в GitLab не совпадает с `WEBHOOK_SECRET` на сервере.
 - `Telegram credentials are not configured` - на сервере не заданы `TELEGRAM_BOT_TOKEN` или `TELEGRAM_CHAT_ID`.
 - Сообщение не приходит - бот не добавлен в группу/канал или не имеет права отправлять сообщения.
-- GitLab job не запускается - pipeline не является Merge Request pipeline.
+- GitLab job не запускается - pipeline идет не из MR и не из push в `test`, `dev`, `main`, `master`.
 - GitLab не может достучаться до сервера - проверь публичный URL, HTTPS, firewall и reverse proxy.
