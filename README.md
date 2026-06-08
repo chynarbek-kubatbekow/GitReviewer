@@ -8,14 +8,14 @@
 
 ### Цель
 
-Сервис должен принимать данные из GitLab CI/CD при запуске Merge Request pipeline и отправлять уведомление в Telegram-чат через Telegram-бота, который уже добавлен в группу.
+Сервис должен принимать данные из GitLab CI/CD при запуске Merge Request pipeline или push pipeline в рабочих ветках и отправлять уведомление в Telegram-чат через Telegram-бота, который уже добавлен в группу.
 
 ### Как это работает
 
 ```text
-GitLab Merge Request pipeline
+GitLab pipeline
         ↓
-GitLab CI job telegram_notify_mr
+GitLab CI job telegram_notify_gitlab
         ↓
 Физический сервер с этим Spring Boot приложением
         ↓
@@ -32,7 +32,7 @@ POST /api/telegram/gitlab/merge-request
 
 Сервер проверяет секрет, форматирует сообщение и отправляет его в Telegram через Bot API.
 
-Уведомление отправляется только для Merge Request pipeline, где target branch равен `main` или `master`.
+Уведомление отправляется для Merge Request pipeline в `test`, `dev`, `main`, `master`, а также для push pipeline в эти ветки.
 
 ## GitLab flow
 
@@ -52,7 +52,7 @@ dev -> release Merge Request в main
 ## Что должно быть в сообщении
 
 ```text
-✅ SUCCESS — telegram_notify_mr
+✅ SUCCESS — telegram_notify_gitlab
 
 📦 Сервис: mobile-client-service
 🔀 MR: Исправление OCR проверки паспорта
@@ -75,6 +75,7 @@ dev -> release Merge Request в main
 - тег ревьювера из `${TELEGRAM_USERS}`;
 - ссылку на Merge Request;
 - ссылку на pipeline.
+- данные commit.
 
 ## Переменные на сервере
 
@@ -181,16 +182,17 @@ stages:
   - notify
 ```
 
-Job запускается только для Merge Request pipeline в `main` или `master`:
+Job запускается для Merge Request pipeline в `test`, `dev`, `main`, `master` и для push pipeline в эти ветки:
 
 ```yaml
 rules:
   - if: >
       $CI_PIPELINE_SOURCE == "merge_request_event" &&
-      $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(main|master)$/
+      $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(test|dev|main|master)$/
+  - if: >
+      $CI_PIPELINE_SOURCE == "push" &&
+      $CI_COMMIT_BRANCH =~ /^(test|dev|main|master)$/
 ```
-
-Если нужно уведомлять обо всех Merge Request, условие target branch можно убрать и оставить только `$CI_PIPELINE_SOURCE == "merge_request_event"`.
 
 Ошибка отправки Telegram-сообщения не ломает pipeline, потому что job имеет `allow_failure: true`, а `curl` заканчивается через `|| true`.
 
