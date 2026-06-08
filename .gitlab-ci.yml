@@ -1,3 +1,6 @@
+stages:
+  - notify
+
 telegram_notify_mr:
   stage: notify
   image: curlimages/curl:8.8.0

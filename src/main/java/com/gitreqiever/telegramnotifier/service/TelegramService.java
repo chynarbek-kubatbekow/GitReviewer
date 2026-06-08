@@ -68,6 +68,7 @@ public class TelegramService {
         String reviewers = stringValue(payload, "telegramUsers", "-");
         String mergeRequestUrl = stringValue(payload, "mergeRequestUrl", "");
         String pipelineUrl = stringValue(payload, "pipelineUrl", "");
+
         String commitTitle = truncate(stringValue(payload, "commitTitle", ""), 500);
         String commitShortSha = stringValue(payload, "commitShortSha", "");
         String commitUrl = stringValue(payload, "commitUrl", "");
