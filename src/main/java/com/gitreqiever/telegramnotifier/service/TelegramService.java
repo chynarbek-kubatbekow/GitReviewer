@@ -73,6 +73,12 @@ public class TelegramService {
         String commitShortSha = stringValue(payload, "commitShortSha", "");
         String commitUrl = stringValue(payload, "commitUrl", "");
         String commitSection = formatCommitSection(commitTitle, commitShortSha, commitUrl);
+        if (mergeRequestUrl.isBlank()) {
+            mergeRequestUrl = pipelineUrl;
+        }
+        if (pipelineUrl.isBlank()) {
+            pipelineUrl = mergeRequestUrl;
+        }
 
         return """
                 %s — <b>%s</b>
