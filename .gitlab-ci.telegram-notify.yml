@@ -1,7 +1,8 @@
 telegram_notify_mr:
   stage: notify
-  image: curlimages/curl:8.8.0
-  entrypoint: [""]
+  image:
+    name: curlimages/curl:8.8.0
+    entrypoint: [""]
   allow_failure: true
   script:
     - |
